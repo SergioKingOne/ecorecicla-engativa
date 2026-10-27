@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ecorecicla
+          POSTGRES_PASSWORD: ecorecicla
+          POSTGRES_DB: ecorecicla_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecorecicla"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (server + client)
+        run: npm run lint
+
+      - name: Backend tests (Jest + Supertest, coverage >= 60%)
+        run: npm run test:server
+        env:
+          TEST_DATABASE_URL: postgres://ecorecicla:ecorecicla@localhost:5432/ecorecicla_test
+          JWT_SECRET: ci-secret-solo-para-pruebas
+
+      - name: Frontend tests (Vitest + React Testing Library)
+        run: npm run test:client
+
+      - name: Build client
+        run: npm run build
+
+      - name: Security audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
